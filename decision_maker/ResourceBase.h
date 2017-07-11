@@ -10,13 +10,14 @@
 #include "message/MessageBroker.h"
 #include "gridarea/ChokeGridArea.h"
 #include "gridarea/GasGridArea.h"
+#include "WeightedArea.h"
 
 namespace CgBot 
 {
 	class ResourceBase   //base class for all resource repo
 	{
 	public:
-		ResourceBase(MessageBroker* broker):
+		ResourceBase(MessageBroker* broker, SortedAreas& areas):
 			region_(NULL),
 			choke_(NULL),
 			baseLocation_(NULL),
@@ -26,7 +27,8 @@ namespace CgBot
 			chokeArea_(NULL),
 			gasArea_(NULL),
 			shipArea_(NULL),
-			allocatedGasWorker_(false)
+			allocatedGasWorker_(false),
+			sortedAreas_(areas)
 		{
 			fsm_ = new StateMachine<ResourceBase>(this, "ResourceBase");
 		};
@@ -71,6 +73,8 @@ namespace CgBot
 
 		BWAPI::Unit base_;
 		BWAPI::Race race_;
+
+		SortedAreas& sortedAreas_;
 
 		std::vector<std::unique_ptr<GridArea>> areas_;
 		int reservedMinerals_;

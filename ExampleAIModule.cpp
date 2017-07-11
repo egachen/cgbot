@@ -6,6 +6,7 @@
 #include "message/MessageBroker.h"
 #include "decision_maker/ResourceBase.h"
 #include "decision_maker/ResourceBaseState.h"
+#include "decision_maker/WeightedArea.h"
 
 using namespace BWAPI;
 using namespace Filter;
@@ -20,9 +21,10 @@ int workerNum = 0;
 
 //init messagebroker
 CgBot::MessageBroker messageBroker;
+CgBot::SortedAreas sortedAreas;
 
 // init ResourceBase
-CgBot::ResourceBase myBase(&messageBroker);
+CgBot::ResourceBase myBase(&messageBroker, sortedAreas);
 
 std::set<BWTA::Chokepoint*> chokepoints;
 

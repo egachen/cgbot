@@ -47,8 +47,9 @@ namespace CgBot
 		// init GridArea
 		chokeArea_ = new ChokeGridArea(
 			240, 32, choke_->getCenter(),
-			"pylon,forge,gateway,cannon,cannon,cannon,zealot,zealot", "ChokeArea");
+			"pylon,forge,gateway,cannon,cannon", "ChokeArea");
 		std::unique_ptr<GridArea> area = std::unique_ptr<GridArea>(chokeArea_);
+		sortedAreas_.addArea(area.get());
 		areas_.push_back(std::move(area));
 
 		BWAPI::Position gasPosition = findNearestGas(baseLocation_->getPosition());
@@ -56,6 +57,7 @@ namespace CgBot
 			200, 32, gasPosition,
 			"gas,pylon,cybernetics,pylon,stargate", "GasArea");
 		area = std::unique_ptr<GridArea>(gasArea_);
+		sortedAreas_.addArea(area.get());
 		areas_.push_back(std::move(area));
 
 		BWAPI::Broodwar << "Woker to collect minerals" << std::endl;
@@ -76,15 +78,7 @@ namespace CgBot
 	}
 
 	void ResourceBase::allocateResource(){
-		int m = getAllocatedMinerals();
-		for (auto &area : areas_){
-			if (area.get()->resourceQuota_.getStatus() == ResourceQuotaStatus::Requested){
-				m = m + area->resourceQuota_.getUnitType().mineralPrice();
-				if (getCurrentMinerals() >= m ){
-					area->resourceQuota_.allocateQuota();
-				}
-			}
-		}
+		sortedAreas_.allocateResource(getAllocatedMinerals(), getCurrentMinerals());
 	}
 
 	int ResourceBase::getAllocatedMinerals(){

@@ -47,7 +47,7 @@ namespace CgBot
 				pos = BWAPI::TilePosition(area->getCenter());
 			}
 			else{
-				Grid* grid = area->findLeastDistanceGrid(t, area->getCenter());
+				Grid* grid = area->findNextBuildGrid(t);
 				if (grid == NULL) {  // no grid to build? TODO: need check if there is problem
 					logger << "No Grid to build : " << t.getName() << std::endl;
 					area->getFSM()->ChangeState(&GridAreaBuildFailed);
@@ -71,6 +71,7 @@ namespace CgBot
 	DEFINE_OBJECT(Building, GridArea)
 	void Building::Execute(GridArea* area) {
 		// TODO TODO TODO:
+	
 	}
 
 	DEFINE_OBJECT(BuildFailed, GridArea)

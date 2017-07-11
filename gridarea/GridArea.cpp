@@ -90,19 +90,6 @@ namespace CgBot{
 
 
 	bool GridArea::isPylonReady() {
-		if (unitQueue_.size() == 0 && 
-			(toBuildQueue_.front() == getProviderType() || 
-			toBuildQueue_.front().isRefinery() ||
-			toBuildQueue_.front().isResourceDepot()
-			)){
-			return true;
-		}
-		// check if there is pylon on this area, if there is, change state
-	    for (auto u : unitQueue_){
-		    if (u->getType() == getProviderType()){
-				return true;
-		    }
-	    }
 		return false;
 	}
 
@@ -235,9 +222,7 @@ namespace CgBot{
 			updateWeightAfterBuild(unit);
 		}
 		
-		if (returnToWork_){  // for non choke area, builder should return to work immede
-			builder_->gather(builder_->getClosestUnit(BWAPI::Filter::IsMineralField));
-		}
+		builder_->gather(builder_->getClosestUnit(BWAPI::Filter::IsMineralField));
 		
 		// move unit from queue
 		toBuildQueue_.pop_front();

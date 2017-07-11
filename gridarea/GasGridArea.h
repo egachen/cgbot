@@ -13,6 +13,7 @@ namespace CgBot
 		{};
 
 		virtual void setBuildingState() { getFSM()->ChangeState(&GridAreaGasBuilding); };
+		bool isPylonReady();
 
 		virtual ~GasGridArea() {};
 
