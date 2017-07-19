@@ -1,11 +1,11 @@
 #include "GridAreaState.h"
 #include "GridArea.h"
+#include "decision_maker/ResourceBase.h"
 
 namespace CgBot
 {
 	DEFINE_OBJECT(CreateGrid, GridArea)
 	void CreateGrid::Execute(GridArea* area){
-		area->createGrids();
 		// change state to idle
 		area->getFSM()->ChangeState(&GridAreaIDLE);
 	}
@@ -16,18 +16,21 @@ namespace CgBot
 
 	DEFINE_OBJECT(StartToBuild, GridArea)
 	void StartToBuild::Execute(GridArea* area){
-
+		
 		// check if there is element in queue
 		if (area->toBuildQueue_.size() <= 0){
 			area->getFSM()->ChangeState(&GridAreaCompleted);
 			return;
 		}
 
-		if (!area->isPylonReady()){
+		BWAPI::UnitType t = area->toBuildQueue_.front();
+		// if the required unit ready
+		if (!gCompletedUnits.isRequireBuildingReady(t)){
 			return;
 		}
-
-		BWAPI::UnitType t = area->toBuildQueue_.front();
+		if (!area->isPylonReady(t, area->getCenter())){
+			return;
+		}
 
 		//request quota for this unit
 		area->resourceQuota_.requestQuota(t);
@@ -38,34 +41,22 @@ namespace CgBot
 	void RequestQuota::Execute(GridArea* area) {
 		if (area->resourceQuota_.getStatus() == ResourceQuotaStatus::Allocated) {
 			BWAPI::UnitType t = area->resourceQuota_.getUnitType();
-			if (!t.isBuilding()) {  // if it's not building
-				area->getFSM()->ChangeState(&GridAreaTrainUnit);
-				return;
-			}
-			BWAPI::TilePosition pos;
-			if (t == t.getRace().getRefinery()){  // if it's Refinery
-				pos = BWAPI::TilePosition(area->getCenter());
-			}
-			else{
-				Grid* grid = area->findNextBuildGrid(t);
-				if (grid == NULL) {  // no grid to build? TODO: need check if there is problem
-					logger << "No Grid to build : " << t.getName() << std::endl;
+
+			BWAPI::Position pos = area->findNextBuildPosition(t);
+			if (pos == BWAPI::Position(0, 0)) {  // no grid to build? TODO: need check if there is problem
 					area->getFSM()->ChangeState(&GridAreaBuildFailed);
 					return;
-				}
-				pos = BWAPI::TilePosition(grid->position_);
 			}
+			
 			logger << "To build " << t.getName() << " at " << pos << std::endl;
-			area->build(pos, t);
+
+			area->build(BWAPI::TilePosition(pos), t);
 			area->setBuildingState();// use virtual function to go to different building state
 		}
 	}
 
 	DEFINE_OBJECT(TrainUnit, GridArea)
 	void TrainUnit::Execute(GridArea* area) {
-		if (area->train()) {
-			area->getFSM()->ChangeState(&GridAreaStartToBuild);
-		}
 	}
 
 	DEFINE_OBJECT(Building, GridArea)

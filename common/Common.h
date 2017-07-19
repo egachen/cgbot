@@ -39,6 +39,8 @@ namespace CgBot
 			unitTypeMap_["gas"] = BWAPI::UnitTypes::Protoss_Assimilator;
 			unitTypeMap_["cybernetics"] = BWAPI::UnitTypes::Protoss_Cybernetics_Core;
 			unitTypeMap_["stargate"] = BWAPI::UnitTypes::Protoss_Stargate;
+			unitTypeMap_["beacon"] = BWAPI::UnitTypes::Protoss_Fleet_Beacon;
+
 		};
 
 		BWAPI::UnitType getUnitType(std::string key){

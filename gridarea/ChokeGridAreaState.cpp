@@ -3,41 +3,33 @@
 
 namespace CgBot
 {
-	DEFINE_OBJECT(BuilderFirstInGrid, GridArea)
-	void BuilderFirstInGrid::Execute(GridArea* area){
-
-		// in this state, always update chokeweight when distance to center < size*2
-		if (area->getBuilder()->getPosition().getDistance(area->getCenter()) > area->getGridSize() * 2){
-			// down cast to choke grid area
-			dynamic_cast<ChokeGridArea*>(area)->updateChokeWeight();
-		}
-		if (area->getBuilder()->isIdle()) {  // if builder is idle, it means it reaches the center
-			// change weight to -1 for all outside grid
-			dynamic_cast<ChokeGridArea*>(area)->removeChokeOutSideGrids();
-			area->getFSM()->ChangeState(&GridAreaStartToBuild);
-		}
-	}
-
-	DEFINE_OBJECT(ReadyToBuild, GridArea)
-	void ReadyToBuild::Execute(GridArea* area){
-		assert(builder_ != NULL);
-
-		area->moveBuilder(area->getCenter());
-
-		if (area->isPositionInArea(area->getBuilder()->getPosition())) {
-			area->getFSM()->ChangeState(&GridAreaBuilderFirstInGrid);
-		}
-	}
 
 	DEFINE_OBJECT(ChokeBuilding, GridArea)
 	void ChokeBuilding::Execute(GridArea* area) {
+		BWAPI::Error err = BWAPI::Broodwar->getLastError();
+
+		if (err != BWAPI::Errors::None){
+			logger << "last error: " << BWAPI::Broodwar->getLastError() << std::endl;
+		}
+		
 		if (area->resourceQuota_.isAllocated()) {
 			if (area->getBuilder()->isIdle()) {
+				if (area->toBuildQueue_.front().isRefinery()){
+					// since there is no oncreate event for refinery
+					area->getBuilder()->gather(area->getBuilder()->getClosestUnit(BWAPI::Filter::IsMineralField));
+					area->resourceQuota_.resetQuota();
+					area->toBuildQueue_.pop_front();
+					area->getFSM()->ChangeState(&GridAreaStartToBuild);
+				}
+				else{
+					// if can not build
 					Grid* grid = area->findLeastDistanceGrid(area->toBuildQueue_.front(), area->getCenter());
 					if (grid != NULL) {
 						grid->weight_ = -1;
 						area->getFSM()->ChangeState(&GridAreaStartToBuild);
 					}
+				}
+
 			}
 		}
 	}

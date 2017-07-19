@@ -8,20 +8,22 @@ namespace CgBot
 	class ChokeGridArea : public GridArea
 	{
 	public:
-		ChokeGridArea(int range, int gridSize, BWAPI::Position pos, std::string buildstr, std::string name) :
-			GridArea(range, gridSize, pos, buildstr, name)
+		ChokeGridArea(BWTA::Region* region, BWAPI::Position pos,
+			std::string buildstr, std::string name, BWAPI::Position gasPos, BWAPI::Unit base) :
+			GridArea(region, pos, buildstr, name), gasPosition_(gasPos), base_(base)
 		{};
 
+		BWAPI::Position findNextBuildPosition(BWAPI::UnitType t);
 		void updateChokeWeight();
 		void removeChokeOutSideGrids();  // set outside of choke grids to -1 weight
-		
-		// for choke grid, the state after create should be readytobuild, move builder to choke
-		virtual void startBuild() { getFSM()->ChangeState(&GridAreaReadyToBuild); };
+
 		virtual void setBuildingState() { getFSM()->ChangeState(&GridAreaChokeBuilding); };
 		
 		bool isPylonReady();
 
-		virtual ~ChokeGridArea() {};
+	private:
+		BWAPI::Position gasPosition_;
+		BWAPI::Unit  base_;
 
 	};
 

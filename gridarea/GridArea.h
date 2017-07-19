@@ -10,6 +10,7 @@
 #include "Grid.h"
 #include "common/StateMachine.h"
 #include "GridAreaState.h"
+#include "data/data.h"
 
 namespace CgBot
 {
@@ -61,76 +62,55 @@ namespace CgBot
 
 	};
 
-	enum class AreaType {
-		ChokeArea,
-		BaseArea,
-		GasArea
-	};
 
+	typedef std::vector<Grid> Grids;
 	// Hold a set of GridArea
 	class GridArea
 	{
 	public:
-		GridArea(int range, int gridSize, BWAPI::Position pos, std::string buildstr, std::string name) :
-			builder_(NULL),
-			range_(range),
-			gridSize_(gridSize),
-			center_(pos),
-			weight_(0)
-		{
-			loadStringToBuildQueue(buildstr);
-			fsm_ = new StateMachine<GridArea>(this, name);
-			fsm_->SetCurrentState(&GridAreaCreateGrid);
-		};
+		explicit GridArea(BWTA::Region* region, BWAPI::Position pos, std::string buildstr, std::string name);
 
 		bool isPositionInArea(const BWAPI::Position& pos) const; // check if pos inside this area
 		std::deque<BWAPI::UnitType>* loadStringToBuildQueue(const std::string& src); // convert string to build queue
-		void createGrids(); // create grids in this area, centerpos is the center of this area
+
+		void createGrids(BWTA::Polygon* polygon);
+	    Grids& getGrids()  { return grids_; };
 
 		void updateWeightAfterBuild(BWAPI::Unit unit);
 		Grid* findLeastDistanceGrid(BWAPI::UnitType t, BWAPI::Position pos);
-		virtual Grid* findNextBuildGrid(BWAPI::UnitType t){ return findLeastDistanceGrid(t, getCenter()); };
+		virtual BWAPI::Position findNextBuildPosition(BWAPI::UnitType t);
 
 		void drawGridArea() const;  // draw grid map with weight
 		bool build(BWAPI::TilePosition p, BWAPI::UnitType t); // get unit from queue and build it
 		void onFrame();  // this is the main function of GridArea
 		virtual void onCreate(BWAPI::Unit unit);
-	    void onComplete(BWAPI::Unit unit);
+	    virtual void onComplete(BWAPI::Unit unit);
 		void onMessage(); // TODO: message from other units in CgBot
 
-		void assignBuilder(BWAPI::Unit u) { builder_ = u; providerType_ = u->getType().getRace().getSupplyProvider(); };
-		void moveBuilder(BWAPI::Position pos) const { // move builder to target area
-			if (builder_->isMoving()){
-				builder_->move(pos);
-			}
-		};
-		bool train();
+		void assignWorker(BWAPI::Unit worker) { workers_.push_back(worker); };
+		const std::vector<BWAPI::Unit>& getWorkers() const { return  workers_; };
+		BWAPI::Unit getBuilder();
+		void moveBuilderToCenter() { getBuilder()->move(getCenter()); };
+
 		bool canBuildHereWithSpace(BWAPI::TilePosition position, BWAPI::UnitType type, int buildDist);
 		BWAPI::TilePosition getBuildLocationNear(BWAPI::TilePosition position, BWAPI::UnitType type, int buildDist);
 		bool buildable(BWAPI::TilePosition position);
 
 		StateMachine<GridArea>* getFSM() const { return fsm_; };
 		//start build state, overload by subclass
-		virtual void startBuild() { fsm_->ChangeState(&GridAreaStartToBuild); };
-		virtual void setBuildingState() { fsm_->ChangeState(&GridAreaStartToBuild); };
+		void startBuild();
+		virtual void setBuildingState() { fsm_->ChangeState(&GridAreaBuilding); };
 
+		void buildPylonOnTrigger(); // build pylon on trigger, no enough pylon
 		BWAPI::Position getCenter() const { return center_; };
-		virtual bool isPylonReady();
-		bool isGasReady() { return unitQueue_.size() == 1 && unitQueue_.front()->getType().isRefinery(); };
-		// get supply provider type
-		BWAPI::UnitType getProviderType(){ return providerType_; };
+		virtual bool isPylonReady(BWAPI::UnitType t, BWAPI::Position pos);
 
 		// update self weight
 		void updateAreaWeight() { weight_ = toBuildQueue_.size();  };
 
-		// get the id of region by position
-		int getRegionID(BWAPI::Position pos) { return BWAPI::Broodwar->getRegionAt(pos)->getID(); };
 		int getWeight() const { return weight_; };
-		int getGridSize() const { return gridSize_; };
-		std::vector<Grid>* getGrids() { return &grids_; };
-		BWAPI::Unit getBuilder() const { return builder_; };
 
-		virtual ~GridArea() { delete fsm_; };
+		virtual ~GridArea() { delete fsm_; std::vector<Grid>().swap(grids_); };
 
 	public:
 		ResourceQuota resourceQuota_;
@@ -140,20 +120,21 @@ namespace CgBot
 
 	private:
 
-		BWAPI::Unit builder_; //dedicate worker for this gridarea
-		int range_;   // range for this area
-		int gridSize_;   // size for each grid
-		int minerals_;  // the resource for this area
-		const int leastMineralsToBuild_ = 100;
+		std::vector<BWAPI::Unit> workers_;
+		BWAPI::Unit currentBuilder_;
+
 		int weight_; // weight for each grid
+		std::string name_;
 
-		std::vector<BWAPI::Unit> ongoingUnitQueue_; // the queue for the ongoing units in this area
-
-		std::vector<Grid> grids_;
 		BWAPI::Position center_;
+		BWTA::Region* region_;
 
 		StateMachine<GridArea> *fsm_;
 		BWAPI::UnitType providerType_;
+
+		Grids grids_;
+
+		bool ongoingSupply_;
 
 	};
 

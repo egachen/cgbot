@@ -5,27 +5,93 @@
 #include "GridArea.h"
 #include "common/StateMachine.h"
 #include "common/UtilHelper.h"
+#include "data/data.h"
 
 
 namespace CgBot{
 
-	bool GridArea::isPositionInArea(const BWAPI::Position& pos) const
+	GridArea::GridArea(BWTA::Region* region, BWAPI::Position pos, std::string buildstr, std::string name) :
+		region_(region),
+		weight_(0),
+		name_(name),
+		center_(pos),
+		currentBuilder_(NULL),
+		ongoingSupply_(false)
 	{
+		loadStringToBuildQueue(buildstr);
+		fsm_ = new StateMachine<GridArea>(this, name);
+		fsm_->SetCurrentState(&GridAreaCreateGrid);
 
-		if ((center_.x - range_ < pos.x  && pos.x < center_.x + range_) &&
-			(center_.y - range_  <pos.y && pos.y < center_.y + range_)){
-			return true;
-		}
-		return false;
-	}
+	};
 
-	void GridArea::createGrids() {
-		for (int x = -range_; x < range_; x = x + gridSize_){
-			for (int y = -range_; y < range_; y = y + gridSize_){
-				BWAPI::Position bp = BWAPI::Position(center_.x + x, center_.y + y);
-				grids_.push_back(Grid(bp, 0));
+	void GridArea::createGrids(BWTA::Polygon* polygon) {
+		// get max box
+		int minx = 10000, miny = 10000, maxx = 0, maxy = 0;
+		for (const auto& p1 : *polygon){
+			if (p1.x < minx) {
+				minx = p1.x;
+			}
+			if (p1.y < miny) {
+				miny = p1.y;
+			}
+			if (p1.x > maxx){
+				maxx = p1.x;
+			}
+			if (p1.y > maxy){
+				maxy = p1.y;
 			}
 		}
+
+
+		// create grids
+		for (int x = minx; x < maxx; x = x + TILE_SIZE){
+			if (x + TILE_SIZE > BWAPI::Broodwar->mapWidth()*TILE_SIZE){
+				continue;
+			}
+			for (int y = miny; y < maxy; y = y + TILE_SIZE){
+				if (y + TILE_SIZE > BWAPI::Broodwar->mapHeight()*TILE_SIZE){
+					continue;
+				}
+				BWAPI::Position bp = BWAPI::Position(x, y);
+				BWAPI::Position bp2 = BWAPI::Position(x, y + TILE_SIZE);
+				BWAPI::Position bp3 = BWAPI::Position(x, y + TILE_SIZE);
+				BWAPI::Position bp4 = BWAPI::Position(x, y + TILE_SIZE);
+
+				int weight = 0;
+				if (!polygon->isInside(bp)) {
+					weight++;
+				}
+				if (!polygon->isInside(bp2)) {
+					weight++;
+				}
+				if (!polygon->isInside(bp3)) {
+					weight++;
+				}
+				if (!polygon->isInside(bp4)) {
+					weight++;
+				}
+
+				if (weight == 4 ) {
+					weight = -1;
+				}
+
+				if (weight != -1 && weight != 0) {
+					if (x + TILE_SIZE >= BWAPI::Broodwar->mapWidth()*TILE_SIZE || x - TILE_SIZE <= 0){
+						weight = 10;
+					}
+					if (y + TILE_SIZE >= BWAPI::Broodwar->mapHeight()*TILE_SIZE || y - TILE_SIZE <= 0){
+						weight = 10;
+					}
+				}
+
+				grids_.push_back(Grid(bp, weight));
+			}
+		}
+	}
+
+	bool GridArea::isPositionInArea(const BWAPI::Position& pos) const
+	{
+		return region_->getPolygon().isInside(pos);
 	}
 
 	void GridArea::drawGridArea() const{
@@ -44,21 +110,49 @@ namespace CgBot{
 		return &toBuildQueue_;
 	}
 
+	BWAPI::Unit GridArea::getBuilder() {
+		if (currentBuilder_) {
+			return currentBuilder_;
+		}
+		if (workers_.empty()){
+			logger << "No avaliable worker to build" << std::endl;
+			abort();
+		}
+
+		currentBuilder_ =  workers_.front();
+		return currentBuilder_;
+	}
+
+	void GridArea::startBuild() {
+		 fsm_->ChangeState(&GridAreaStartToBuild);
+	}
 
 	bool GridArea::build(BWAPI::TilePosition p, BWAPI::UnitType t) {
-		return builder_->build(t, p);
+		getBuilder()->move(BWAPI::Position(p));
+		return getBuilder()->build(t, p);
 	}
 	
 	void GridArea::updateWeightAfterBuild(BWAPI::Unit unit) {
-		for (std::vector<Grid>::iterator it = grids_.begin(); it != grids_.end(); ++it){
+		for (Grids::iterator it = grids_.begin(); it != grids_.end(); it++){
 			if ((*it).weight_ >= 0 &&
-				!canBuildHereWithSpace(BWAPI::TilePosition((*it).position_), getProviderType(), 0)) {
+				!canBuildHereWithSpace(BWAPI::TilePosition((*it).position_), gPlayerInfo.getProviderType(), 0)) {
 				//  check if it' buildable with pylon?
+				//logger << u.position_ << " can not build" << std::endl;
 				(*it).weight_ = -1;
 			}
 		}
 	}
 
+	BWAPI::Position GridArea::findNextBuildPosition(BWAPI::UnitType t)
+	{ 
+
+		Grid* grid = findLeastDistanceGrid(t, getCenter());
+		if (grid == NULL) {  // no grid to build? TODO: need check if there is problem
+			logger << "No Grid to build : " << t.getName() << std::endl;
+			return BWAPI::Position(0,0);
+		}
+		return grid->position_;
+	};
 
 	Grid* GridArea::findLeastDistanceGrid(BWAPI::UnitType t, BWAPI::Position pos) {
 		Grid* grid = NULL;
@@ -66,7 +160,8 @@ namespace CgBot{
 		int width = t.width();
 		int height = t.height();
 
-		for (std::vector<Grid>::iterator it = grids_.begin(); it != grids_.end(); ++it){
+		for (Grids::iterator it = grids_.begin(); it != grids_.end(); it++){
+			
 			if ((*it).weight_ >= 0
 				&& canBuildHereWithSpace(BWAPI::TilePosition((*it).position_), t, 0)){
 
@@ -81,7 +176,7 @@ namespace CgBot{
 				int d = (int)pos.getDistance(bp);
 				if (d < distance) {
 					distance = d;
-					grid = &(*it);
+					grid = &((*it));
 				}
 			}
 		}
@@ -89,7 +184,13 @@ namespace CgBot{
 	}
 
 
-	bool GridArea::isPylonReady() {
+	bool GridArea::isPylonReady(BWAPI::UnitType t, BWAPI::Position pos) {
+		if (t == gPlayerInfo.getProviderType()){
+			return true;
+		}
+		if (gCompletedUnits.getUnitCount(gPlayerInfo.getProviderType()) > 0){
+			return true;
+		}
 		return false;
 	}
 
@@ -193,59 +294,72 @@ namespace CgBot{
 		return true;
 	}
 
-	bool GridArea::train() {
-		// search the building to train
-		BWAPI::UnitType t = toBuildQueue_.front();
-		if (minerals_ < t.mineralPrice()) {
-			return false;
+	void GridArea::buildPylonOnTrigger() {
+		if (gCompletedUnits.freeSupply_ < 2 && toBuildQueue_.front() != gPlayerInfo.getProviderType() && !ongoingSupply_) {
+			toBuildQueue_.push_front(gPlayerInfo.getProviderType());
 		}
-		for (auto b : unitQueue_) {
-			if (b->getType().buildsWhat().count(t) != 0){
-				if (b->isTraining()){
-					return false;
-				}
-				else{
-					b->train(t);
-					return true;
-				}
-			}
-		}
-		logger << "No unit to build : " << t.getName() << std::endl;
-		return false;
 	}
 
+
 	void GridArea::onCreate(BWAPI::Unit unit) {
-		// once a building is created, for protoss, ready to build another
-		logger << unit->getType().getName() << " is building!" << std::endl;
-		// change weight since there is new building in this area
-		if (unit->getType().isBuilding()) {
-			updateWeightAfterBuild(unit);
+		if (unit->getType() != toBuildQueue_.front()){
+			logger << name_ << ": unexpected unit on create event, expected: " << toBuildQueue_.front().getName()
+				<< " received: " << unit->getType().getName() << std::endl;
+			return;
 		}
-		
-		builder_->gather(builder_->getClosestUnit(BWAPI::Filter::IsMineralField));
-		
+		// once a building is created, for protoss, ready to build another
+		logger << name_ << " : " << unit->getType().getName() << " is building!" << std::endl;
+
 		// move unit from queue
 		toBuildQueue_.pop_front();
-		// push to ongoing
-		ongoingUnitQueue_.push_back(unit);
+
 		// reset resource quota
 		resourceQuota_.resetQuota();
+
+		if (!unit->getType().isBuilding()) {
+			return;  // if it's not building, return
+		}
+		if (unit->getType() == gPlayerInfo.getProviderType()) {
+			ongoingSupply_ = true;
+		}
+		// change weight since there is new building in this area
+		updateWeightAfterBuild(unit);
+		buildPylonOnTrigger(); // check if more supply provider needed
+		getBuilder()->returnCargo();
 		fsm_->ChangeState(&GridAreaStartToBuild);
 	}
 
 	void GridArea::onComplete(BWAPI::Unit unit){
-		logger << unit->getType().getName() << " is completed!" << std::endl;
+	
+		logger << name_ << " : " << unit->getType().getName() << " is completed!" << std::endl;
 		// check unittype, if it's provider, update weight
-		if (unit->getType() == getProviderType()){
-			//updateChokeDistanceWeight(unit->getPosition());
-		}
-		//remove from ongoing queue
-		std::remove(ongoingUnitQueue_.begin(), ongoingUnitQueue_.end(), unit);
+
 
 		if (unit->getType().isBuilding() ){
 			unit->setRallyPoint(center_);
 		}
-		unitQueue_.push_back(unit); // insert into completed unit queue
+
+		//if worker
+		if (unit->getType() == gPlayerInfo.getRace().getWorker()){
+			assignWorker(unit);
+			unit->gather(unit->getClosestUnit(BWAPI::Filter::IsMineralField));
+		}
+
+		// if it's refinery
+		if (unit->getType().isRefinery()) {
+			for (std::vector<BWAPI::Unit>::iterator it = workers_.end()-1; it > workers_.end() - 4; it--){
+				(*it)->gather((*it)->getClosestUnit(BWAPI::Filter::IsRefinery));
+			}
+		}
+		// set flag for ongoing supply
+		if (unit->getType() == gPlayerInfo.getProviderType()) {
+			ongoingSupply_ = false;
+		}
+		// update center if pylon is ready
+		if (unit->getType() == gPlayerInfo.getProviderType() &&
+			gCompletedUnits.getUnitCount(gPlayerInfo.getProviderType()) > 1) {
+			center_ = unit->getPosition();
+		}
 	}
 
 	void GridArea::onFrame() {

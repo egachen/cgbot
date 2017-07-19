@@ -14,6 +14,9 @@ namespace CgBot
 	};
 
 	void SortedAreas::allocateResource(int request, int current){
+		if (areas_.empty()){ return; };
+
+		sortAreas();
 		for (auto &area : areas_){
 			if (area->resourceQuota_.getStatus() == ResourceQuotaStatus::Requested){
 				request = request + area->resourceQuota_.getUnitType().mineralPrice();

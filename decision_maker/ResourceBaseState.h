@@ -13,6 +13,9 @@ namespace CgBot
 	// when game start, try to make worker as soon as possible
 	DECLARE_CLASS(MakeWorker, ResourceBase)
 
+	// in this state, make cannon as soon as possible
+	DECLARE_CLASS(DefenseZergRush, ResourceBase)
+
 	// in this state, try to reach one science
 	DECLARE_CLASS(RushScience, ResourceBase)
 

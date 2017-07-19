@@ -1,5 +1,6 @@
 #pragma once
 #include <BWAPI.h>
+#include <memory>
 
 namespace CgBot
 {

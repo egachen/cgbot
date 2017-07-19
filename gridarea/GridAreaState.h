@@ -16,6 +16,7 @@ namespace CgBot {
 	// request quota
 	DECLARE_CLASS(RequestQuota, GridArea)
 
+
 	// builder is building constructure, will leave this state once oncreate
 	DECLARE_CLASS(Building, GridArea)
 	// Failed to build a constructure
